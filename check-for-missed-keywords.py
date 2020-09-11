@@ -4,6 +4,7 @@
 #
 
 import argparse
+from datetime import timedelta
 import requests
 import requests_cache
 import pandas as pd
@@ -11,10 +12,41 @@ import datetime
 from progress.bar import IncrementalBar
 from googleAPIget_service import get_service
 from urllib.parse import urlparse
+import re
+from bs4 import BeautifulSoup as BS
 
-testonly = True
+MATCH_ALL = r'.*'
 
-def parse(haystack, needle):
+
+def like(string):
+    """
+    Return a compiled regular expression that matches the given
+    string with any prefix and postfix, e.g. if string = "hello",
+    the returned regex matches r".*hello.*"
+    """
+    string_ = string
+    if not isinstance(string_, str):
+        string_ = str(string_)
+    regex = MATCH_ALL + re.escape(string_) + MATCH_ALL
+    return re.compile(regex, flags=re.DOTALL)
+
+
+def find_by_text(soup, text, tag, **kwargs):
+    """
+    Find the tag in soup that matches all provided kwargs, and contains the
+    text.
+
+    If no match is found, return None.
+    If more than one match is found, raise ValueError.
+    """
+    elements = soup.find_all(tag, **kwargs)
+    matches = []
+    for element in elements:
+        if element.find(text=like(text)):
+            matches.append(element)
+    return len(matches) 
+
+def checkKeywordOnPage(haystack, needle):
     print("Checking for ["+needle+"] in "+haystack)
     try:
         page = requests.get(haystack)
@@ -27,6 +59,19 @@ def parse(haystack, needle):
     print (result)
     return result
   
+
+def checkKeywordInHTags(haystack, needle):
+    print("Checking for ["+needle+"] in H tags of "+haystack)
+    try:
+        page = requests.get(haystack) # will be fast as already in requests cache
+    except:
+        print("Fail")
+        return -1
+    soup = BS(page.text.lower())
+    lowerneedle = needle.lower()
+    result = find_by_text(soup, needle, 'h1') + find_by_text(soup, needle, 'h2') + find_by_text(soup, needle, 'h3')
+    print (result)
+    return result  
 
 
 requests_cache.install_cache('page_cache')
@@ -71,13 +116,8 @@ except:
 
 combinedDF = pd.DataFrame()
 
-if testonly:
-    breakcounter = 0
 
 for thisgoogleaccount in googleaccountslist:
-    breakcounter =+ 1
-    if breakcounter > 2:
-        break
     print("Processing: " + thisgoogleaccount)
     # Authenticate and construct service.
     service = get_service('webmasters', 'v3', scope, 'client_secrets.json', thisgoogleaccount)
@@ -90,13 +130,14 @@ for thisgoogleaccount in googleaccountslist:
 
 
     bigdf = pd.DataFrame()
-    if testonly:
-        breakcounter2 = 0
+ 
+
+    end_date = datetime.datetime.now()
+    start_date = end_date - timedelta(days=period_days)
+
 
     for item in profiles['siteEntry']:
-        breakcounter2 =+ 1
-        if breakcounter2 > 4:
-            break
+ 
         bar.next()
         if item['permissionLevel'] != 'siteUnverifiedUser':
 
@@ -105,8 +146,8 @@ for thisgoogleaccount in googleaccountslist:
             #print(item['id'] + ',' + start_date + ',' + end_date)
             results = service.searchanalytics().query(
             siteUrl=item['siteUrl'], body={
-                'startDate': '2020-09-01',
-                'endDate': '2020-09-07',
+                'startDate': start_date.strftime("%Y-%m-%d"),
+                'endDate': end_date.strftime("%Y-%m-%d"),
                 'dimensions': dimensionsarray,
                 'searchType': dataType,
                 'rowLimit': 5000
@@ -124,7 +165,7 @@ for thisgoogleaccount in googleaccountslist:
                     smalldf['keys']
 
                 rootDomain = urlparse(item['siteUrl']).hostname
-                if 'www.' in rootDomain:
+                if rootDomain.find('www.') > 0:
                     rootDomain = rootDomain.replace('www.','')
 
                 smalldf.insert(0,'siteUrl',item['siteUrl'])
@@ -158,15 +199,18 @@ if len(combinedDF) > 0:
         name = googleaccountstring + "-" + name 
 
     combinedDF['KeywordFound'] = -1
+    combinedDF['KeywordFoundinHTags'] = -1
     combinedDF.reset_index()
     
-    if testonly:
-        breakcounter3 = 0
+    
     for i in range(len(combinedDF)):      
-        combinedDF['KeywordFound'].values[i] = parse(combinedDF['key-1'].values[i], combinedDF['key-2'].values[i])
-        breakcounter3 =+ 1
-        if breakcounter3 > 20:
-            break
+         returnedResult = checkKeywordOnPage(combinedDF['key-1'].values[i], combinedDF['key-2'].values[i])
+         combinedDF['KeywordFound'].values[i] = returnedResult
+         if returnedResult > 0:
+            # it exists (less common case), now find out where
+            returnedResult = checkKeywordInHTags(combinedDF['key-1'].values[i], combinedDF['key-2'].values[i])
+            combinedDF['KeywordFoundinHTags'].values[i] = returnedResult
+ 
         
     with pd.ExcelWriter(name + '.xlsx') as writer:
         combinedDF.to_excel(writer, sheet_name='data')
