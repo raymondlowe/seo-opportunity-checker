@@ -44,7 +44,8 @@ def find_by_text(soup, text, tag, **kwargs):
     for element in elements:
         if element.find(text=like(text)):
             matches.append(element)
-    return len(matches) 
+    return len(matches)
+
 
 def checkKeywordOnPage(haystack, needle):
     print("Checking for ["+needle+"] in "+haystack)
@@ -56,22 +57,24 @@ def checkKeywordOnPage(haystack, needle):
     lowerpagetext = page.text.lower()
     lowerneedle = needle.lower()
     result = lowerpagetext.count(lowerneedle)
-    print (result)
+    print(result)
     return result
-  
+
 
 def checkKeywordInHTags(haystack, needle):
     print("Checking for ["+needle+"] in H tags of "+haystack)
     try:
-        page = requests.get(haystack) # will be fast as already in requests cache
+        # will be fast as already in requests cache
+        page = requests.get(haystack)
     except:
         print("Fail")
         return -1
     soup = BS(page.text.lower())
     lowerneedle = needle.lower()
-    result = find_by_text(soup, needle, 'h1') + find_by_text(soup, needle, 'h2') + find_by_text(soup, needle, 'h3')
-    print (result)
-    return result  
+    result = find_by_text(soup, needle, 'h1') + find_by_text(soup,
+                                                             needle, 'h2') + find_by_text(soup, needle, 'h3')
+    print(result)
+    return result
 
 
 requests_cache.install_cache('page_cache')
@@ -120,24 +123,22 @@ combinedDF = pd.DataFrame()
 for thisgoogleaccount in googleaccountslist:
     print("Processing: " + thisgoogleaccount)
     # Authenticate and construct service.
-    service = get_service('webmasters', 'v3', scope, 'client_secrets.json', thisgoogleaccount)
+    service = get_service('webmasters', 'v3', scope,
+                          'client_secrets.json', thisgoogleaccount)
     profiles = service.sites().list().execute()
-    #profiles is now list    
+    # profiles is now list
 
     #print("Len Profiles siteEntry: " + str(len(profiles['siteEntry'])))
 
-    bar = IncrementalBar('Processing',max=len(profiles['siteEntry']))
-
+    bar = IncrementalBar('Processing', max=len(profiles['siteEntry']))
 
     bigdf = pd.DataFrame()
- 
 
     end_date = datetime.datetime.now()
     start_date = end_date - timedelta(days=period_days)
 
-
     for item in profiles['siteEntry']:
- 
+
         bar.next()
         if item['permissionLevel'] != 'siteUnverifiedUser':
 
@@ -145,48 +146,49 @@ for thisgoogleaccount in googleaccountslist:
 
             #print(item['id'] + ',' + start_date + ',' + end_date)
             results = service.searchanalytics().query(
-            siteUrl=item['siteUrl'], body={
-                'startDate': start_date.strftime("%Y-%m-%d"),
-                'endDate': end_date.strftime("%Y-%m-%d"),
-                'dimensions': dimensionsarray,
-                'searchType': dataType,
-                'rowLimit': 5000
-            }).execute()
+                siteUrl=item['siteUrl'], body={
+                    'startDate': start_date.strftime("%Y-%m-%d"),
+                    'endDate': end_date.strftime("%Y-%m-%d"),
+                    'dimensions': dimensionsarray,
+                    'searchType': dataType,
+                    'rowLimit': 5000
+                }).execute()
 
             if len(results) == 2:
-                #print(results['rows'])
-                #print(smalldf)
+                # print(results['rows'])
+                # print(smalldf)
                 smalldf = smalldf.append(results['rows'])
-                #print(smalldf)
+                # print(smalldf)
 
                 if multidimention:
-                    #solves key1 reserved word problem
-                    smalldf[['key-1','key-2']] = pd.DataFrame(smalldf['keys'].tolist(), index= smalldf.index)
+                    # solves key1 reserved word problem
+                    smalldf[[
+                        'key-1', 'key-2']] = pd.DataFrame(smalldf['keys'].tolist(), index=smalldf.index)
                     smalldf['keys']
 
                 rootDomain = urlparse(item['siteUrl']).hostname
                 if rootDomain.find('www.') > 0:
-                    rootDomain = rootDomain.replace('www.','')
+                    rootDomain = rootDomain.replace('www.', '')
 
-                smalldf.insert(0,'siteUrl',item['siteUrl'])
-                smalldf.insert(0,'rootDomain',rootDomain)
-                #print(smalldf)
+                smalldf.insert(0, 'siteUrl', item['siteUrl'])
+                smalldf.insert(0, 'rootDomain', rootDomain)
+                # print(smalldf)
                 if len(bigdf.columns) == 0:
                     bigdf = smalldf.copy()
                 else:
-                    bigdf = pd.concat([bigdf,smalldf])
+                    bigdf = pd.concat([bigdf, smalldf])
 
-                #print(bigdf)
+                # print(bigdf)
     bar.finish()
 
     bigdf.reset_index()
-    #bigdf.to_json("output.json",orient="records")
+    # bigdf.to_json("output.json",orient="records")
 
     if len(bigdf) > 0:
         bigdf['keys'] = bigdf["keys"].str[0]
 
         # Got the bigdf now of all the data from this account, so add it into the combined
-        combinedDF = pd.concat([combinedDF,bigdf],sort=True)
+        combinedDF = pd.concat([combinedDF, bigdf], sort=True)
 
     # clean up objects used in this pass
     del bigdf
@@ -195,31 +197,58 @@ for thisgoogleaccount in googleaccountslist:
 
 
 if len(combinedDF) > 0:
-    if googleaccountstring > "" :
-        name = googleaccountstring + "-" + name 
+    if googleaccountstring > "":
+        name = googleaccountstring + "-" + name
 
     combinedDF['KeywordFound'] = -1
     combinedDF['KeywordFoundinHTags'] = -1
+    combinedDF['KeywordFoundinTitle'] = -1
     combinedDF.reset_index()
-    
-    
-    for i in range(len(combinedDF)):      
-         returnedResult = checkKeywordOnPage(combinedDF['key-1'].values[i], combinedDF['key-2'].values[i])
-         combinedDF['KeywordFound'].values[i] = returnedResult
-         if returnedResult > 0:
+
+    lowerpagetext = ''
+    lowerneedle = ''
+    result = ''
+
+    for i in range(len(combinedDF)):
+
+        haystack = combinedDF['key-1'].values[i]
+        needle = combinedDF['key-2'].values[i]
+
+        page = None
+        print("Checking for ["+needle+"] in "+haystack)
+        try:
+            page = requests.get(haystack)
+        except:
+            print("Fail")
+
+        if page is None:
+            result = -1
+        else:
+            lowerpagetext = page.text.lower()
+            lowerneedle = needle.lower()
+            result = lowerpagetext.count(lowerneedle)
+        print(result)
+
+        combinedDF['KeywordFound'].values[i] = result
+        if result > 0:
             # it exists (less common case), now find out where
-            returnedResult = checkKeywordInHTags(combinedDF['key-1'].values[i], combinedDF['key-2'].values[i])
-            combinedDF['KeywordFoundinHTags'].values[i] = returnedResult
- 
-        
+
+            print("Checking for ["+needle+"] in DOM tags of "+haystack)
+
+            soup = BS(lowerpagetext)
+
+            combinedDF['KeywordFoundinHTags'].values[i] = find_by_text(
+                soup, needle, 'h1') + find_by_text(soup, needle, 'h2') + find_by_text(soup, needle, 'h3')
+
+            combinedDF['KeywordFoundinTitle'].values[i] = soup.title.string.lower().count(
+                lowerneedle)
+
     with pd.ExcelWriter(name + '.xlsx') as writer:
         combinedDF.to_excel(writer, sheet_name='data')
 
         print("finished and outputed to excel file")
 else:
     print("nothing found")
-
-
 
 
 print("--done--")
