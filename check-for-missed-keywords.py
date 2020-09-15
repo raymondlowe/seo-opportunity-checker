@@ -14,6 +14,7 @@ from googleAPIget_service import get_service
 from urllib.parse import urlparse
 import re
 from bs4 import BeautifulSoup as BS
+import time
 
 MATCH_ALL = r'.*'
 
@@ -88,10 +89,12 @@ parser.add_argument(
 parser.add_argument("-n", "--name", default='check-for-missed-keywords-report.xlsx', type=str,
                     help="File name for final output, default is check-for-missed-keywords-report + the current date. You do NOT need to add file extension")
 parser.add_argument("-g", "--googleaccount", type=str, default="", help="Name of a google account; does not have to literally be the account name but becomes a token to access that particular set of secrets. Client secrets will have to be in this a file that is this string concatenated with client_secret.json.  OR if this is the name of a text file then every line in the text file is processed as one user and all results appended together into a file")
+parser.add_argument("-d", "--delay", type=int, default=0, help="Seconds delay between api calls to reduce quota impact")
 
 args = parser.parse_args()
 
 period_days = args.period_days
+delay_seconds = args.delay
 
 dimensionsstring = "page,query"
 dimensionsarray = dimensionsstring.split(",")
@@ -179,6 +182,7 @@ for thisgoogleaccount in googleaccountslist:
                     bigdf = pd.concat([bigdf, smalldf])
 
                 # print(bigdf)
+        time.sleep(delay_seconds)
     bar.finish()
 
     bigdf.reset_index()
