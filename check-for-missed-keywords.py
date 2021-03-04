@@ -77,6 +77,16 @@ def checkKeywordInHTags(haystack, needle):
     print(result)
     return result
 
+def checkIndividualWordsOnPage(haystack:str, needle: str):
+    
+
+    words = needle.split()
+    x = []
+    for word in words:
+        x.append({'word': word[0], 'count': checkKeywordOnPage(haystack, word[0])})
+
+    return result
+
 
 requests_cache.install_cache('page_cache')
 
