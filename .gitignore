@@ -1,2 +1,5 @@
 __pycache__/*
 __pycache__/googleAPIget_service.cpython-38.pyc
+analytics.dat
+client_secrets.json
+webmasters.dat
