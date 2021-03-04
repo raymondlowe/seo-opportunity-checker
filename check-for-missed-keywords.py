@@ -78,12 +78,32 @@ def checkKeywordInHTags(haystack, needle):
     return result
 
 def checkIndividualWordsOnPage(haystack:str, needle: str):
-    
+    result = ''
 
     words = needle.split()
     x = []
     for word in words:
-        x.append({'word': word[0], 'count': checkKeywordOnPage(haystack, word[0])})
+        x.append({'word': word, 'count': checkKeywordOnPage(haystack, str(word))})
+
+    print (x)
+
+    lowestWord = ""
+    lowestWordCount = 999
+    highestWord = ""
+    highestWordCount = -1
+
+    for y in x:
+        if y['count'] > highestWordCount:
+            highestWordCount = y['count'] 
+            highestWord = y['word']
+        if y['count'] < lowestWordCount:
+            lowestWordCount = y['count'] 
+            lowestWord = y['word']
+
+    result = {'highestWord': highestWord, 'highestWordCount': highestWordCount,
+    'lowestWord':lowestWord, 'lowestWordCount': lowestWordCount }
+
+    print(result)
 
     return result
 
@@ -100,8 +120,10 @@ parser.add_argument("-n", "--name", default='check-for-missed-keywords-report.xl
                     help="File name for final output, default is check-for-missed-keywords-report + the current date. You do NOT need to add file extension")
 parser.add_argument("-g", "--googleaccount", type=str, default="", help="Name of a google account; does not have to literally be the account name but becomes a token to access that particular set of secrets. Client secrets will have to be in this a file that is this string concatenated with client_secret.json.  OR if this is the name of a text file then every line in the text file is processed as one user and all results appended together into a file")
 parser.add_argument("-d", "--delay", type=int, default=0, help="Seconds delay between api calls to reduce quota impact")
+parser.add_argument("-j", "--justtesting", type=int, default=0, help="Just testing; how many lines to process")
 
 args = parser.parse_args()
+
 
 period_days = args.period_days
 delay_seconds = args.delay
@@ -115,6 +137,8 @@ dataType = "web"
 name = args.name
 
 googleaccountstring = args.googleaccount
+
+justtesting = args.justtesting
 
 if name == 'check-for-missed-keywords-report.xlsx':
     name = 'check-for-missed-keywords-report-' + \
@@ -132,8 +156,14 @@ except:
 
 combinedDF = pd.DataFrame()
 
+testingcounter = 0
 
 for thisgoogleaccount in googleaccountslist:
+    testingcounter += 1
+    if justtesting > 0:
+        if testingcounter > justtesting:
+            break
+
     print("Processing: " + thisgoogleaccount)
     # Authenticate and construct service.
     service = get_service('webmasters', 'v3', scope,
@@ -150,8 +180,12 @@ for thisgoogleaccount in googleaccountslist:
     end_date = datetime.datetime.now()
     start_date = end_date - timedelta(days=period_days)
 
+    testingcounter2 = 0
     for item in profiles['siteEntry']:
-
+        testingcounter2 += 1
+        if justtesting > 0:
+            if testingcounter2 > justtesting:
+                break
         bar.next()
         if item['permissionLevel'] != 'siteUnverifiedUser':
 
@@ -217,14 +251,23 @@ if len(combinedDF) > 0:
     combinedDF['KeywordFound'] = -1
     combinedDF['KeywordFoundinHTags'] = -1
     combinedDF['KeywordFoundinTitle'] = -1
+    combinedDF['highestWord'] = ''
+    combinedDF['highestWordCount'] = -1
+    combinedDF['lowestWord'] = ''
+    combinedDF['lowestWordCount'] = -1
     combinedDF.reset_index()
 
     lowerpagetext = ''
     lowerneedle = ''
     result = ''
 
+    testingcounter = 0
     for i in range(len(combinedDF)):
-
+        testingcounter += 1
+        if justtesting > 0:
+            if testingcounter > justtesting:
+                break
+            
         haystack = combinedDF['key-1'].values[i]
         needle = combinedDF['key-2'].values[i]
 
@@ -242,8 +285,18 @@ if len(combinedDF) > 0:
             lowerneedle = needle.lower()
             result = lowerpagetext.count(lowerneedle)
         print(result)
-
         combinedDF['KeywordFound'].values[i] = result
+
+        # after checking whole string, lets try individual words
+
+        individualWordsResult = checkIndividualWordsOnPage(haystack, needle)
+ 
+        combinedDF['highestWord'].values[i] = individualWordsResult['highestWord']
+        combinedDF['highestWordCount'].values[i] = individualWordsResult['highestWordCount']
+        combinedDF['lowestWord'].values[i] = individualWordsResult['lowestWord']
+        combinedDF['lowestWordCount'].values[i] = individualWordsResult['lowestWordCount']
+
+
         if result > 0:
             # it exists (less common case), now find out where
 
