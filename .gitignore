@@ -1,9 +1,9 @@
-__pycache__/*
-__pycache__/googleAPIget_service.cpython-38.pyc
+__pycache__
+__pycache__
 analytics.dat
-client_secrets.json
+*.json
 webmasters.dat
 page_cache.sqlite
-.vscode/launch.json
-check-for-missed-keywords-report-2021-03-04-14-41-27.xlsx
-
+.vscode
+*.xlsx
+*.dat
