@@ -307,8 +307,9 @@ if len(combinedDF) > 0:
             combinedDF['KeywordFoundinHTags'].values[i] = find_by_text(
                 soup, needle, 'h1') + find_by_text(soup, needle, 'h2') + find_by_text(soup, needle, 'h3')
 
-            combinedDF['KeywordFoundinTitle'].values[i] = soup.title.string.lower().count(
-                lowerneedle)
+            combinedDF['KeywordFoundinTitle'].values[i] = 0 if soup.title is None or soup.title.string is None else soup.title.string.lower().count(
+            title_string = soup.title.string if soup.title is not None and soup.title.string is not None else None
+            combinedDF['KeywordFoundinTitle'].values[i] = 0 if title_string is None else title_string.lower().count(lowerneedle)
 
     with pd.ExcelWriter(name + '.xlsx') as writer:
         combinedDF.to_excel(writer, sheet_name='data')
