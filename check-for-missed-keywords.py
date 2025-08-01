@@ -108,9 +108,6 @@ def checkIndividualWordsOnPage(haystack:str, needle: str):
     return result
 
 
-requests_cache.install_cache('page_cache')
-
-
 parser = argparse.ArgumentParser()
 
 
@@ -121,8 +118,66 @@ parser.add_argument("-n", "--name", default='check-for-missed-keywords-report.xl
 parser.add_argument("-g", "--googleaccount", type=str, default="", help="Name of a google account; does not have to literally be the account name but becomes a token to access that particular set of secrets. Client secrets will have to be in this a file that is this string concatenated with client_secret.json.  OR if this is the name of a text file then every line in the text file is processed as one user and all results appended together into a file")
 parser.add_argument("-d", "--delay", type=int, default=0, help="Seconds delay between api calls to reduce quota impact")
 parser.add_argument("-j", "--justtesting", type=int, default=0, help="Just testing; how many lines to process")
+parser.add_argument("-e", "--expire-cache", type=str, help="Clear requests cache: 'all' to clear everything, integer for days old, or URL substring to match")
 
 args = parser.parse_args()
+
+# Handle cache expiration if requested
+if args.expire_cache:
+    import os
+    
+    cache_file = 'page_cache.sqlite'
+    
+    if args.expire_cache.lower() == 'all':
+        # Clear all cache
+        if os.path.exists(cache_file):
+            os.remove(cache_file)
+            print(f"Cache cleared: removed {cache_file}")
+        else:
+            print("No cache file found to clear")
+    elif args.expire_cache.isdigit():
+        # Clear cache older than specified days
+        days_old = int(args.expire_cache)
+        
+        # For date-based clearing, we'll clear all expired responses
+        # This is the safest approach with the current API
+        session = requests_cache.CachedSession('page_cache')
+        
+        try:
+            initial_count = session.cache.count()
+            session.cache.delete(expired=True)
+            remaining_count = session.cache.count()
+            deleted_count = initial_count - remaining_count
+            
+            print(f"Cache cleared: removed {deleted_count} expired entries")
+            if deleted_count == 0:
+                print(f"Note: No expired entries found. To clear all entries regardless of age, use 'all'")
+        except Exception as e:
+            print(f"Error clearing expired cache entries: {e}")
+    else:
+        # Clear cache entries matching URL substring
+        url_pattern = args.expire_cache
+        
+        session = requests_cache.CachedSession('page_cache')
+        
+        deleted_count = 0
+        try:
+            # Get all URLs and delete matching ones
+            all_urls = list(session.cache.urls())
+            for url in all_urls:
+                if url_pattern.lower() in url.lower():
+                    session.cache.delete(url=url)
+                    deleted_count += 1
+            
+            print(f"Cache cleared: removed {deleted_count} entries matching '{url_pattern}'")
+        except Exception as e:
+            print(f"Error clearing cache by URL pattern: {e}")
+    
+    # Exit after cache operation
+    exit(0)
+
+# Install cache for normal operation
+requests_cache.install_cache('page_cache')
 
 
 period_days = args.period_days

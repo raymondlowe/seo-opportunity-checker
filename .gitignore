@@ -4,6 +4,7 @@ analytics.dat
 *.json
 webmasters.dat
 page_cache.sqlite
+test_cache*.sqlite
 .vscode
 *.xlsx
 *.dat
